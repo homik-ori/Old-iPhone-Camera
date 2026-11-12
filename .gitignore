@@ -1,0 +1,18 @@
+# macOS / Xcode
+.DS_Store
+build/
+DerivedData/
+*.xcarchive
+*.ipa
+*.dSYM
+
+# Xcode user data
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+
+# Local credentials and temporary files
+.env
+*.token
+*_token.txt
+gh_token*
