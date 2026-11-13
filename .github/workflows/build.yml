@@ -1,0 +1,85 @@
+name: Build unsigned IPA
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build iPhone6Camera.ipa
+    runs-on: macos-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Validate project
+        run: |
+          set -o pipefail
+          xcodebuild -list -project iPhone6Camera.xcodeproj
+
+      - name: Build unsigned archive
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project iPhone6Camera.xcodeproj \
+            -scheme iPhone6Camera \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/iPhone6Camera.xcarchive" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_ENTITLEMENTS="" \
+            DEVELOPMENT_TEAM="" \
+            SKIP_INSTALL=NO \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=NO \
+            | tee "$RUNNER_TEMP/xcodebuild.log"
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP_PATH="$RUNNER_TEMP/iPhone6Camera.xcarchive/Products/Applications/iPhone6Camera.app"
+          if [ ! -d "$APP_PATH" ]; then
+            APP_PATH="$(find "$RUNNER_TEMP/iPhone6Camera.xcarchive/Products" -maxdepth 5 -type d -name 'iPhone6Camera.app' -print -quit)"
+          fi
+          test -n "$APP_PATH"
+          test -d "$APP_PATH"
+
+          rm -rf build
+          mkdir -p build/Payload
+          cp -R "$APP_PATH" build/Payload/iPhone6Camera.app
+
+          plutil -p build/Payload/iPhone6Camera.app/Info.plist | head -40
+          test -f build/Payload/iPhone6Camera.app/iPhone6Camera
+
+          cd build
+          /usr/bin/zip -r -y iPhone6Camera.ipa Payload
+          echo "--- IPA contents ---"
+          unzip -l iPhone6Camera.ipa | head -30
+          ls -lh iPhone6Camera.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iPhone6Camera-unsigned-ipa
+          path: build/iPhone6Camera.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
