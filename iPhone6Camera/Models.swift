@@ -125,14 +125,14 @@ enum ShutterSpeed: Int, CaseIterable {
     var title: String {
         switch self {
         case .auto: return "АВТО"
-        case .s125: return "1/125"
-        case .s60: return "1/60"
-        case .s30: return "1/30"
-        case .s15: return "1/15"
-        case .s8: return "1/8"
-        case .s4: return "1/4"
-        case .s2: return "1/2"
-        case .s1: return "1 с"
+        case .s125: return "1/125с"
+        case .s60: return "1/60с"
+        case .s30: return "1/30с"
+        case .s15: return "1/15с"
+        case .s8: return "1/8с"
+        case .s4: return "1/4с"
+        case .s2: return "1/2с"
+        case .s1: return "1.0с"
         }
     }
 
