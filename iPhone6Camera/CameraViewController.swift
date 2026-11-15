@@ -729,6 +729,7 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
                         if case .failure = result {
                             self.shutterSpeed = .auto
                             self.settingsPanel.setShutter(.auto)
+                            UserDefaults.standard.set(ShutterSpeed.auto.rawValue, forKey: DefaultsKey.shutter)
                         }
                     }
                 }
@@ -1174,12 +1175,13 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         blinkScreen()
 
         let aspectAtCapture = currentAspect
-        let exposureStops = engine.captureExposureStops
         engine.capturePhoto(flash: flashSetting) { [weak self] result in
             guard let self else { return }
             switch result {
-            case .success(let data):
-                self.processCapturedData(data, aspect: aspectAtCapture, exposureStops: exposureStops)
+            case .success(let captured):
+                self.processCapturedData(captured.data,
+                                         aspect: aspectAtCapture,
+                                         exposureStops: captured.exposureStops)
             case .failure(let error):
                 self.isCapturing = false
                 self.showErrorAlert(error)

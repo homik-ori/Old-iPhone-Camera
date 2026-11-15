@@ -1,6 +1,11 @@
 import AVFoundation
 import Foundation
 
+struct CapturedPhoto {
+    let data: Data
+    let exposureStops: Float
+}
+
 /// Отвечает за сессию AVCapture, выбор широкоугольного объектива,
 /// фокус/экспозицию, зум и получение JPEG-данных.
 final class CameraEngine: NSObject {
@@ -422,7 +427,7 @@ final class CameraEngine: NSObject {
 
     // MARK: - Съёмка
 
-    func capturePhoto(flash: FlashSetting, completion: @escaping (Result<Data, Error>) -> Void) {
+    func capturePhoto(flash: FlashSetting, completion: @escaping (Result<CapturedPhoto, Error>) -> Void) {
         sessionQueue.async { [weak self] in
             guard let self, self.isConfigured, let device = self.videoDevice else {
                 DispatchQueue.main.async { completion(.failure(AppError.cameraUnavailable)) }
@@ -445,8 +450,16 @@ final class CameraEngine: NSObject {
                 settings.flashMode = .off
             }
 
+            let exposureStops = self.captureExposureStops
             let processor = PhotoCaptureProcessor { result in
-                DispatchQueue.main.async { completion(result) }
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success(let data):
+                        completion(.success(CapturedPhoto(data: data, exposureStops: exposureStops)))
+                    case .failure(let error):
+                        completion(.failure(error))
+                    }
+                }
             }
             processor.retainUntilFinished()
             self.photoOutput.capturePhoto(with: settings, delegate: processor)
