@@ -8,7 +8,7 @@
 Приложение написано на Swift и UIKit. Используются только AVFoundation, Core Image и Photos — без CocoaPods и SPM.
 
 <p align="center">
-  <img src="Screenshots/shutter.png" width="310" alt="Ручная выдержка">
+  <img src="Screenshots/filters.png" width="310" alt="Фильтры и палитра">
   <img src="Screenshots/camera.png" width="310" alt="Главный экран">
 </p>
 <p align="center"><sub>Скриншоты из iOS Simulator: в нём нет камеры, поэтому видоискатель чёрный.</sub></p>
