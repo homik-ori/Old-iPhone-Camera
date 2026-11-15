@@ -1082,6 +1082,10 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
             } else {
                 animations()
             }
+
+            DispatchQueue.main.async { [weak self] in
+                self?.settingsPanel.scrollFiltersToSelection()
+            }
         } else {
             let animations = {
                 self.settingsPanel.alpha = 0

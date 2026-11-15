@@ -437,14 +437,23 @@ final class CameraSettingsPanel: UIView, UICollectionViewDataSource, UICollectio
         updatePaletteButtons()
         filterCollection.reloadData()
         if let index = CameraFilter.allCases.firstIndex(of: look.filter) {
-            filterCollection.selectItem(at: IndexPath(item: index, section: 0),
-                                        animated: false,
-                                        scrollPosition: [])
+            let indexPath = IndexPath(item: index, section: 0)
+            filterCollection.layoutIfNeeded()
+            filterCollection.selectItem(at: indexPath, animated: false, scrollPosition: [])
+            filterCollection.scrollToItem(at: indexPath, at: .centeredHorizontally, animated: false)
         }
         updatePaletteVisibility()
         if selectedTool == .filters {
             updateDetailHeight()
         }
+    }
+
+    func scrollFiltersToSelection() {
+        guard let index = CameraFilter.allCases.firstIndex(of: look.filter) else { return }
+        filterCollection.layoutIfNeeded()
+        filterCollection.scrollToItem(at: IndexPath(item: index, section: 0),
+                                      at: .centeredHorizontally,
+                                      animated: false)
     }
 
     func selectTool(_ index: Int) {
@@ -464,6 +473,11 @@ final class CameraSettingsPanel: UIView, UICollectionViewDataSource, UICollectio
         }
         updateDetailHeight()
         scrollToolIntoView(at: index)
+        if tool == .filters {
+            DispatchQueue.main.async { [weak self] in
+                self?.scrollFiltersToSelection()
+            }
+        }
     }
 
     private func updateDetailHeight() {
@@ -612,6 +626,7 @@ final class CameraSettingsPanel: UIView, UICollectionViewDataSource, UICollectio
         look.filter = filter
         filterCollection.reloadData()
         filterCollection.selectItem(at: indexPath, animated: false, scrollPosition: [])
+        filterCollection.scrollToItem(at: indexPath, at: .centeredHorizontally, animated: true)
         updatePaletteVisibility()
         UISelectionFeedbackGenerator().selectionChanged()
         onFilterChange?(filter)
