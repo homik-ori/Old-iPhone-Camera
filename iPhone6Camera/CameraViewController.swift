@@ -6,16 +6,16 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
     // MARK: - Камера и обработка
 
     private let engine = CameraEngine()
-    private var previewLayer: AVCaptureVideoPreviewLayer!
 
     // MARK: - Слои интерфейса
 
     private let previewContainer = UIView()
-    private let previewView = CameraPreviewView()
+    private let previewView = FilteredPreviewView()
     private let gridOverlay = GridOverlayView()
     private let topBar = UIView()
     private let flashButton = UIButton(type: .system)
     private let chevronButton = UIButton(type: .system)
+    private let gridQuickButton = UIButton(type: .system)
     private let lockBanner = UILabel()
     private let focusReticle = FocusReticleView()
     private let zoomStack = UIStackView()
@@ -26,6 +26,7 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
     private let thumbnailButton = UIButton(type: .custom)
     private let flipButton = UIButton(type: .system)
     private let settingsPanel = CameraSettingsPanel()
+    private var settingsPanelHeight: NSLayoutConstraint!
     private let toastLabel = UILabel()
     private let countdownBackdrop = UIView()
     private let countdownLabel = UILabel()
@@ -40,6 +41,7 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
     private var flashSetting: FlashSetting = .auto
     private var timerSetting: TimerSetting = .off
     private var shutterSpeed: ShutterSpeed = .auto
+    private var look = LookSettings.default
     private var isGridOn = false
     private var isFrontCamera = false
     private var isSettingsOpen = false
@@ -81,6 +83,10 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         static let timer = "camera.timer"
         static let grid = "camera.grid"
         static let shutter = "camera.shutter"
+        static let filter = "camera.filter"
+        static let palette = "camera.palette"
+        static let paletteIntensity = "camera.paletteIntensity"
+        static let retro = "camera.retro"
     }
 
     // MARK: - Жизненный цикл
@@ -92,6 +98,10 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         view.backgroundColor = Theme.background
         restoreSettings()
         buildInterface()
+        engine.onVideoFrame = { [weak self] pixelBuffer in
+            self?.previewView.enqueue(pixelBuffer)
+        }
+        previewView.setLook(look)
         installGestures()
         installAppObservers()
         refreshAllControls()
@@ -100,14 +110,23 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         UIApplication.shared.isIdleTimerDisabled = true
+        previewView.isPaused = false
         impactFeedback.prepare()
         selectionFeedback.prepare()
         startCameraIfPossible()
 
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-openShutterPanel") {
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("-openShutterPanel") {
+            settingsPanel.selectTool(6)
+            setSettingsOpen(true, animated: false)
+        }
+        if arguments.contains("-openFiltersPanel") {
             settingsPanel.selectTool(4)
             setSettingsOpen(true, animated: false)
+            if arguments.contains("-selectPalette") {
+                setFilter(.palette)
+            }
         }
         #endif
     }
@@ -122,6 +141,7 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         UIApplication.shared.isIdleTimerDisabled = false
+        previewView.isPaused = true
         engine.stop()
         cancelCountdown()
         hideZoomDial(animated: false)
@@ -130,9 +150,6 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         applyPreviewFrame(animated: false)
-        if let connection = previewLayer.connection, connection.isVideoOrientationSupported {
-            connection.videoOrientation = .portrait
-        }
         previewView.layoutIfNeeded()
     }
 
@@ -180,10 +197,6 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         previewView.clipsToBounds = true
         previewContainer.addSubview(previewView)
 
-        previewLayer = AVCaptureVideoPreviewLayer(session: engine.session)
-        previewLayer.videoGravity = .resizeAspectFill
-        previewView.previewLayer = previewLayer
-
         gridOverlay.frame = previewView.bounds
         gridOverlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         previewView.addSubview(gridOverlay)
@@ -197,7 +210,7 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         zoomStack.alignment = .center
         previewView.addSubview(zoomStack)
 
-        for factor in [1, 2, 3] {
+        for factor in [1, 2] {
             let button = UIButton(type: .system)
             button.translatesAutoresizingMaskIntoConstraints = false
             button.tag = factor
@@ -249,25 +262,41 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
 
         chevronButton.translatesAutoresizingMaskIntoConstraints = false
         chevronButton.backgroundColor = Theme.controlBackground
-        chevronButton.layer.cornerRadius = 22
+        chevronButton.layer.cornerRadius = 14
         chevronButton.tintColor = .white
         chevronButton.setImage(UIImage(systemName: "chevron.up",
-                                       withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)),
+                                       withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .bold)),
                                for: .normal)
         chevronButton.accessibilityLabel = "Открыть настройки"
         chevronButton.addTarget(self, action: #selector(chevronTapped), for: .touchUpInside)
         topBar.addSubview(chevronButton)
 
+        gridQuickButton.translatesAutoresizingMaskIntoConstraints = false
+        gridQuickButton.backgroundColor = Theme.controlBackground
+        gridQuickButton.layer.cornerRadius = 18
+        gridQuickButton.tintColor = .white
+        gridQuickButton.setImage(UIImage(systemName: "grid",
+                                         withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)),
+                                 for: .normal)
+        gridQuickButton.accessibilityLabel = "Сетка"
+        gridQuickButton.addTarget(self, action: #selector(gridQuickTapped), for: .touchUpInside)
+        topBar.addSubview(gridQuickButton)
+
         NSLayoutConstraint.activate([
-            flashButton.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 16),
+            flashButton.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 18),
             flashButton.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
             flashButton.widthAnchor.constraint(equalToConstant: 44),
             flashButton.heightAnchor.constraint(equalToConstant: 44),
 
             chevronButton.centerXAnchor.constraint(equalTo: topBar.centerXAnchor),
             chevronButton.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
-            chevronButton.widthAnchor.constraint(equalToConstant: 44),
-            chevronButton.heightAnchor.constraint(equalToConstant: 44)
+            chevronButton.widthAnchor.constraint(equalToConstant: 28),
+            chevronButton.heightAnchor.constraint(equalToConstant: 28),
+
+            gridQuickButton.trailingAnchor.constraint(equalTo: topBar.trailingAnchor, constant: -18),
+            gridQuickButton.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
+            gridQuickButton.widthAnchor.constraint(equalToConstant: 36),
+            gridQuickButton.heightAnchor.constraint(equalToConstant: 36)
         ])
     }
 
@@ -299,9 +328,9 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
 
         modeLabel.translatesAutoresizingMaskIntoConstraints = false
         modeLabel.attributedText = NSAttributedString(string: "ФОТО", attributes: [
-            .font: UIFont.systemFont(ofSize: 14, weight: .semibold),
+            .font: UIFont.systemFont(ofSize: 13, weight: .semibold),
             .foregroundColor: Theme.yellow,
-            .kern: 1.8
+            .kern: 1.2
         ])
         modeLabel.textAlignment = .center
         modeLabel.accessibilityLabel = "Режим фото"
@@ -313,14 +342,14 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
 
         thumbnailButton.translatesAutoresizingMaskIntoConstraints = false
         thumbnailButton.backgroundColor = UIColor(white: 1.0, alpha: 0.12)
-        thumbnailButton.layer.cornerRadius = 7
+        thumbnailButton.layer.cornerRadius = 6
         thumbnailButton.layer.borderWidth = 1
         thumbnailButton.layer.borderColor = UIColor.white.withAlphaComponent(0.18).cgColor
         thumbnailButton.clipsToBounds = true
         thumbnailButton.tintColor = UIColor.white.withAlphaComponent(0.65)
         thumbnailButton.imageView?.contentMode = .scaleAspectFill
         thumbnailButton.setImage(UIImage(systemName: "photo.fill",
-                                         withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular)),
+                                         withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)),
                                  for: .normal)
         thumbnailButton.addTarget(self, action: #selector(thumbnailTapped), for: .touchUpInside)
         thumbnailButton.accessibilityLabel = "Последний снимок"
@@ -332,11 +361,11 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         thumbnailButton.addSubview(thumbnailSpinner)
 
         flipButton.translatesAutoresizingMaskIntoConstraints = false
-        flipButton.backgroundColor = Theme.controlBackground
-        flipButton.layer.cornerRadius = 23
+        flipButton.backgroundColor = UIColor(red: 28.0 / 255.0, green: 28.0 / 255.0, blue: 30.0 / 255.0, alpha: 1.0)
+        flipButton.layer.cornerRadius = 24
         flipButton.tintColor = .white
         flipButton.setImage(UIImage(systemName: "arrow.triangle.2.circlepath.camera",
-                                    withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .medium)),
+                                    withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)),
                             for: .normal)
         flipButton.accessibilityLabel = "Переключить камеру"
         flipButton.addTarget(self, action: #selector(flipTapped), for: .touchUpInside)
@@ -345,26 +374,26 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         NSLayoutConstraint.activate([
             shutterButton.centerXAnchor.constraint(equalTo: bottomContainer.centerXAnchor),
             shutterButton.bottomAnchor.constraint(equalTo: bottomContainer.bottomAnchor, constant: -2),
-            shutterButton.widthAnchor.constraint(equalToConstant: 82),
-            shutterButton.heightAnchor.constraint(equalToConstant: 82),
+            shutterButton.widthAnchor.constraint(equalToConstant: 72),
+            shutterButton.heightAnchor.constraint(equalToConstant: 72),
 
             modeLabel.centerXAnchor.constraint(equalTo: bottomContainer.centerXAnchor),
             modeLabel.bottomAnchor.constraint(equalTo: shutterButton.topAnchor, constant: -10),
             modeLabel.heightAnchor.constraint(equalToConstant: 18),
             modeLabel.widthAnchor.constraint(equalToConstant: 120),
 
-            thumbnailButton.leadingAnchor.constraint(equalTo: bottomContainer.leadingAnchor, constant: 26),
+            thumbnailButton.leadingAnchor.constraint(equalTo: bottomContainer.leadingAnchor, constant: 28),
             thumbnailButton.centerYAnchor.constraint(equalTo: shutterButton.centerYAnchor),
-            thumbnailButton.widthAnchor.constraint(equalToConstant: 54),
-            thumbnailButton.heightAnchor.constraint(equalToConstant: 54),
+            thumbnailButton.widthAnchor.constraint(equalToConstant: 48),
+            thumbnailButton.heightAnchor.constraint(equalToConstant: 48),
 
             thumbnailSpinner.centerXAnchor.constraint(equalTo: thumbnailButton.centerXAnchor),
             thumbnailSpinner.centerYAnchor.constraint(equalTo: thumbnailButton.centerYAnchor),
 
             flipButton.trailingAnchor.constraint(equalTo: bottomContainer.trailingAnchor, constant: -26),
             flipButton.centerYAnchor.constraint(equalTo: shutterButton.centerYAnchor),
-            flipButton.widthAnchor.constraint(equalToConstant: 46),
-            flipButton.heightAnchor.constraint(equalToConstant: 46)
+            flipButton.widthAnchor.constraint(equalToConstant: 48),
+            flipButton.heightAnchor.constraint(equalToConstant: 48)
         ])
     }
 
@@ -390,15 +419,32 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         settingsPanel.onShutterChange = { [weak self] speed in
             self?.setShutter(speed)
         }
+        settingsPanel.onFilterChange = { [weak self] filter in
+            self?.setFilter(filter)
+        }
+        settingsPanel.onPaletteChange = { [weak self] tint in
+            self?.setPalette(tint)
+        }
+        settingsPanel.onPaletteIntensityChange = { [weak self] intensity in
+            self?.setPaletteIntensity(intensity)
+        }
+        settingsPanel.onRetroChange = { [weak self] value in
+            self?.setRetro(value)
+        }
         settingsPanel.onGridChange = { [weak self] isOn in
             self?.setGrid(isOn)
         }
+        settingsPanel.onContentHeightChange = { [weak self] height in
+            guard let self else { return }
+            self.updateSettingsPanelHeight(height, animated: self.isSettingsOpen)
+        }
 
+        settingsPanelHeight = settingsPanel.heightAnchor.constraint(equalToConstant: max(156, settingsPanel.preferredHeight))
         NSLayoutConstraint.activate([
             settingsPanel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
             settingsPanel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
             settingsPanel.bottomAnchor.constraint(equalTo: shutterButton.topAnchor, constant: -10),
-            settingsPanel.heightAnchor.constraint(equalToConstant: 150)
+            settingsPanelHeight
         ])
     }
 
@@ -746,18 +792,35 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
     }
 
     private func updatePreviewMirroring() {
-        guard let connection = previewLayer.connection, connection.isVideoMirroringSupported else { return }
-        connection.automaticallyAdjustsVideoMirroring = false
-        connection.isVideoMirrored = isFrontCamera
-        if connection.isVideoOrientationSupported {
-            connection.videoOrientation = .portrait
-        }
+        previewView.setMirrored(isFrontCamera)
     }
 
     private func focusCamera(at previewPoint: CGPoint, lock: Bool) {
-        guard let previewLayer else { return }
-        let devicePoint = previewLayer.captureDevicePointConverted(fromLayerPoint: previewPoint)
-        engine.focus(at: devicePoint, lock: lock)
+        engine.focus(at: devicePoint(from: previewPoint), lock: lock)
+    }
+
+    private func devicePoint(from previewPoint: CGPoint) -> CGPoint {
+        let viewSize = previewView.bounds.size
+        guard viewSize.width > 0, viewSize.height > 0 else {
+            return CGPoint(x: 0.5, y: 0.5)
+        }
+
+        // Камера отдаёт кадр 4:3; видоискатель заполняется по aspectFill.
+        let sourceWidth: CGFloat = 3.0
+        let sourceHeight: CGFloat = 4.0
+        let scale = max(viewSize.width / sourceWidth, viewSize.height / sourceHeight)
+        let displayedWidth = sourceWidth * scale
+        let displayedHeight = sourceHeight * scale
+        let offsetX = (viewSize.width - displayedWidth) / 2.0
+        let offsetY = (viewSize.height - displayedHeight) / 2.0
+
+        var x = (previewPoint.x - offsetX) / displayedWidth
+        let y = (previewPoint.y - offsetY) / displayedHeight
+        if isFrontCamera {
+            x = 1.0 - x
+        }
+        return CGPoint(x: min(max(x, 0.05), 0.95),
+                       y: min(max(y, 0.05), 0.95))
     }
 
     // MARK: - Кнопки
@@ -770,6 +833,11 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
 
     @objc private func chevronTapped() {
         setSettingsOpen(!isSettingsOpen, animated: true)
+        selectionFeedback.selectionChanged()
+    }
+
+    @objc private func gridQuickTapped() {
+        setGrid(!isGridOn)
         selectionFeedback.selectionChanged()
     }
 
@@ -924,6 +992,49 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         gridOverlay.isOn = isOn
         UserDefaults.standard.set(isOn, forKey: DefaultsKey.grid)
         settingsPanel.setGrid(isOn)
+        gridQuickButton.tintColor = isOn ? Theme.yellow : .white
+        gridQuickButton.backgroundColor = isOn
+            ? Theme.yellow.withAlphaComponent(0.18)
+            : Theme.controlBackground
+    }
+
+    private func setFilter(_ filter: CameraFilter) {
+        look.filter = filter
+        UserDefaults.standard.set(filter.rawValue, forKey: DefaultsKey.filter)
+        settingsPanel.setLook(look)
+        previewView.setLook(look)
+    }
+
+    private func setPalette(_ tint: PaletteTint) {
+        look.palette = tint
+        UserDefaults.standard.set(tint.rawValue, forKey: DefaultsKey.palette)
+        previewView.setLook(look)
+    }
+
+    private func setPaletteIntensity(_ value: Float) {
+        look.paletteIntensity = min(max(value, 0), 1)
+        UserDefaults.standard.set(Double(look.paletteIntensity), forKey: DefaultsKey.paletteIntensity)
+        previewView.setLook(look)
+    }
+
+    private func setRetro(_ value: Float) {
+        look.retro = min(max(value, 0), 1)
+        UserDefaults.standard.set(Double(look.retro), forKey: DefaultsKey.retro)
+        previewView.setLook(look)
+    }
+
+    private func updateSettingsPanelHeight(_ height: CGFloat, animated: Bool) {
+        guard settingsPanelHeight != nil else { return }
+        settingsPanelHeight.constant = height
+        if animated, isSettingsOpen {
+            UIView.animate(withDuration: 0.28,
+                           delay: 0,
+                           options: [.beginFromCurrentState, .allowUserInteraction]) {
+                self.view.layoutIfNeeded()
+            }
+        } else {
+            view.layoutIfNeeded()
+        }
     }
 
     private func applyExposureBias(_ value: Float, haptic: Bool) {
@@ -953,8 +1064,10 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
             settingsPanel.alpha = 0
             settingsPanel.transform = CGAffineTransform(translationX: 0, y: 24)
             modeLabel.alpha = 1
+            settingsPanelHeight.constant = settingsPanel.preferredHeight
 
             let animations = {
+                self.view.layoutIfNeeded()
                 self.settingsPanel.alpha = 1
                 self.settingsPanel.transform = .identity
                 self.modeLabel.alpha = 0
@@ -996,7 +1109,7 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
     private func updateChevron() {
         let name = isSettingsOpen ? "chevron.down" : "chevron.up"
         chevronButton.setImage(UIImage(systemName: name,
-                                       withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)),
+                                       withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .bold)),
                                for: .normal)
         chevronButton.accessibilityLabel = isSettingsOpen ? "Закрыть настройки" : "Открыть настройки"
     }
@@ -1117,8 +1230,11 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
     private func updateZoomControls() {
         for case let button as UIButton in zoomStack.arrangedSubviews {
             let isSelected = abs(currentZoom - CGFloat(button.tag)) < 0.2
-            button.backgroundColor = isSelected ? UIColor(white: 0.94, alpha: 1.0) : Theme.controlBackground
-            button.setTitleColor(isSelected ? .black : .white, for: .normal)
+            button.backgroundColor = Theme.controlBackground
+            button.setTitleColor(isSelected ? Theme.yellow : .white, for: .normal)
+            button.transform = isSelected
+                ? CGAffineTransform(scaleX: 1.08, y: 1.08)
+                : .identity
         }
     }
 
@@ -1175,13 +1291,15 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         blinkScreen()
 
         let aspectAtCapture = currentAspect
+        let lookAtCapture = look
         engine.capturePhoto(flash: flashSetting) { [weak self] result in
             guard let self else { return }
             switch result {
             case .success(let captured):
                 self.processCapturedData(captured.data,
                                          aspect: aspectAtCapture,
-                                         exposureStops: captured.exposureStops)
+                                         exposureStops: captured.exposureStops,
+                                         look: lookAtCapture)
             case .failure(let error):
                 self.isCapturing = false
                 self.showErrorAlert(error)
@@ -1189,11 +1307,15 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         }
     }
 
-    private func processCapturedData(_ data: Data, aspect: CaptureAspect, exposureStops: Float) {
+    private func processCapturedData(_ data: Data,
+                                     aspect: CaptureAspect,
+                                     exposureStops: Float,
+                                     look: LookSettings) {
         thumbnailSpinner.startAnimating()
         ImageProcessor.shared.process(jpegData: data,
                                       aspect: aspect,
-                                      exposureStops: exposureStops) { [weak self] result in
+                                      exposureStops: exposureStops,
+                                      look: look) { [weak self] result in
             guard let self else { return }
             switch result {
             case .success(let photo):
@@ -1319,10 +1441,7 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
     private func applyPreviewFrame(animated: Bool) {
         guard previewContainer.bounds.width > 0, previewContainer.bounds.height > 0 else { return }
         let target = targetPreviewFrame()
-        guard target != previewView.frame else {
-            previewView.previewLayer?.frame = previewView.bounds
-            return
-        }
+        guard target != previewView.frame else { return }
 
         if animated, previewView.window != nil {
             UIView.transition(with: previewView,
@@ -1330,13 +1449,11 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
                               options: [.transitionCrossDissolve, .allowAnimatedContent],
                               animations: {
                 self.previewView.frame = target
-                self.previewView.previewLayer?.frame = CGRect(origin: .zero, size: target.size)
                 self.previewView.layoutIfNeeded()
                 self.gridOverlay.frame = self.previewView.bounds
             }, completion: nil)
         } else {
             previewView.frame = target
-            previewView.previewLayer?.frame = CGRect(origin: .zero, size: target.size)
             previewView.layoutIfNeeded()
             gridOverlay.frame = previewView.bounds
         }
@@ -1376,6 +1493,20 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         if let value = ShutterSpeed(rawValue: defaults.integer(forKey: DefaultsKey.shutter)) {
             shutterSpeed = value
         }
+        if let raw = defaults.string(forKey: DefaultsKey.filter),
+           let value = CameraFilter(rawValue: raw) {
+            look.filter = value
+        }
+        if let raw = defaults.string(forKey: DefaultsKey.palette),
+           let value = PaletteTint(rawValue: raw) {
+            look.palette = value
+        }
+        if defaults.object(forKey: DefaultsKey.paletteIntensity) != nil {
+            look.paletteIntensity = Float(defaults.double(forKey: DefaultsKey.paletteIntensity))
+        }
+        if defaults.object(forKey: DefaultsKey.retro) != nil {
+            look.retro = Float(defaults.double(forKey: DefaultsKey.retro))
+        }
         isGridOn = defaults.bool(forKey: DefaultsKey.grid)
     }
 
@@ -1386,11 +1517,17 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         settingsPanel.setShutter(shutterSpeed)
         settingsPanel.setGrid(isGridOn)
         settingsPanel.setExposure(currentExposureBias)
+        settingsPanel.setLook(look)
+        previewView.setLook(look)
         gridOverlay.isOn = isGridOn
         updateFlashControl()
         updateChevron()
         updateZoomControls()
         zoomDial.setZoom(currentZoom)
+        gridQuickButton.tintColor = isGridOn ? Theme.yellow : .white
+        gridQuickButton.backgroundColor = isGridOn
+            ? Theme.yellow.withAlphaComponent(0.18)
+            : Theme.controlBackground
         modeLabel.alpha = 1
     }
 
@@ -1455,23 +1592,5 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         if clamped >= 1.95 { return 2.0 }
         if clamped <= -1.95 { return -2.0 }
         return (clamped / 0.3).rounded() * 0.3
-    }
-}
-
-/// UIView, который сам подгоняет слой превью под свои границы.
-final class CameraPreviewView: UIView {
-    var previewLayer: AVCaptureVideoPreviewLayer? {
-        didSet {
-            oldValue?.removeFromSuperlayer()
-            if let previewLayer {
-                layer.addSublayer(previewLayer)
-            }
-            setNeedsLayout()
-        }
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        previewLayer?.frame = bounds
     }
 }

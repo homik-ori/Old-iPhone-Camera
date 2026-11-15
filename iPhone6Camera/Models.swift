@@ -37,13 +37,21 @@ enum CaptureAspect: String, CaseIterable {
     /// 8-мегапиксельный эквивалент iPhone 6. Длинная сторона — 3264 px,
     /// как у сенсора 3264 × 2448. Для 16:9 и 1:1 кадр обрезается пропорционально.
     var pixelSize: CGSize {
+        pixelSize(forLongEdge: 3264)
+    }
+
+    func pixelSize(forLongEdge longEdge: CGFloat) -> CGSize {
+        let long = (longEdge / 2.0).rounded() * 2.0
         switch self {
         case .fourThree:
-            return CGSize(width: 2448, height: 3264)
+            let short = (long * 3.0 / 4.0 / 2.0).rounded() * 2.0
+            return CGSize(width: short, height: long)
         case .sixteenNine:
-            return CGSize(width: 1836, height: 3264)
+            let short = (long * 9.0 / 16.0 / 2.0).rounded() * 2.0
+            return CGSize(width: short, height: long)
         case .square:
-            return CGSize(width: 2448, height: 2448)
+            let side = (long * 3.0 / 4.0 / 2.0).rounded() * 2.0
+            return CGSize(width: side, height: side)
         }
     }
 }

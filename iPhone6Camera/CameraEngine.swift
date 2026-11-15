@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreVideo
 import Foundation
 
 struct CapturedPhoto {
@@ -8,13 +9,18 @@ struct CapturedPhoto {
 
 /// Отвечает за сессию AVCapture, выбор широкоугольного объектива,
 /// фокус/экспозицию, зум и получение JPEG-данных.
-final class CameraEngine: NSObject {
+final class CameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     let session = AVCaptureSession()
 
     private let sessionQueue = DispatchQueue(label: "com.homikori.iPhone6Camera.session", qos: .userInitiated)
+    private let videoQueue = DispatchQueue(label: "com.homikori.iPhone6Camera.video", qos: .userInitiated)
     private let photoOutput = AVCapturePhotoOutput()
+    private let videoOutput = AVCaptureVideoDataOutput()
     private var videoInput: AVCaptureDeviceInput?
     private var videoDevice: AVCaptureDevice?
+
+    /// Кадры для живого видоискателя. Вызывается на видео-очереди.
+    var onVideoFrame: ((CVPixelBuffer) -> Void)?
 
     private(set) var position: AVCaptureDevice.Position = .back
     private(set) var isConfigured = false
@@ -104,6 +110,14 @@ final class CameraEngine: NSObject {
         guard session.canAddOutput(photoOutput) else { throw AppError.cannotAddOutput }
         session.addOutput(photoOutput)
 
+        videoOutput.alwaysDiscardsLateVideoFrames = true
+        videoOutput.videoSettings = [
+            kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange)
+        ]
+        videoOutput.setSampleBufferDelegate(self, queue: videoQueue)
+        guard session.canAddOutput(videoOutput) else { throw AppError.cannotAddOutput }
+        session.addOutput(videoOutput)
+
         // Отключаем максимальную вычислительную обработку: никакого Deep Fusion,
         // агрессивного шумодава и многоступенчатого склеивания. .speed — самый
         // «прямой» путь получения одного кадра.
@@ -144,9 +158,19 @@ final class CameraEngine: NSObject {
     }
 
     private func updateConnectionOrientation() {
-        guard let connection = photoOutput.connection(with: .video) else { return }
-        if connection.isVideoOrientationSupported {
-            connection.videoOrientation = .portrait
+        if let connection = photoOutput.connection(with: .video) {
+            if connection.isVideoOrientationSupported {
+                connection.videoOrientation = .portrait
+            }
+        }
+        if let connection = videoOutput.connection(with: .video) {
+            if connection.isVideoOrientationSupported {
+                connection.videoOrientation = .portrait
+            }
+            if connection.isVideoMirroringSupported {
+                connection.automaticallyAdjustsVideoMirroring = false
+                connection.isVideoMirrored = false
+            }
         }
     }
 
@@ -467,6 +491,13 @@ final class CameraEngine: NSObject {
     }
 
     // MARK: - Наблюдатели
+
+    func captureOutput(_ output: AVCaptureOutput,
+                       didOutput sampleBuffer: CMSampleBuffer,
+                       from connection: AVCaptureConnection) {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        onVideoFrame?(pixelBuffer)
+    }
 
     private func installSessionObservers() {
         let center = NotificationCenter.default

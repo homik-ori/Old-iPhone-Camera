@@ -14,7 +14,7 @@ final class ShutterButton: UIControl {
                            initialSpringVelocity: 0.4,
                            options: [.beginFromCurrentState, .allowUserInteraction]) {
                 self.transform = pressed ? CGAffineTransform(scaleX: 0.92, y: 0.92) : .identity
-                self.innerView.transform = pressed ? CGAffineTransform(scaleX: 0.86, y: 0.86) : .identity
+                self.innerView.transform = pressed ? CGAffineTransform(scaleX: 0.88, y: 0.88) : .identity
             }
         }
     }
@@ -55,8 +55,8 @@ final class ShutterButton: UIControl {
 
             innerView.centerXAnchor.constraint(equalTo: centerXAnchor),
             innerView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            innerView.widthAnchor.constraint(equalTo: widthAnchor, constant: -22),
-            innerView.heightAnchor.constraint(equalTo: heightAnchor, constant: -22)
+            innerView.widthAnchor.constraint(equalTo: widthAnchor, constant: -14),
+            innerView.heightAnchor.constraint(equalTo: heightAnchor, constant: -14)
         ])
     }
 
@@ -67,6 +67,6 @@ final class ShutterButton: UIControl {
     }
 
     override var intrinsicContentSize: CGSize {
-        CGSize(width: 82, height: 82)
+        CGSize(width: 72, height: 72)
     }
 }

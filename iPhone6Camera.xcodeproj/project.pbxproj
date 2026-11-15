@@ -11,6 +11,8 @@
 		A10000000000000000000031 /* CameraViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* CameraViewController.swift */; };
 		A10000000000000000000032 /* CameraEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000022 /* CameraEngine.swift */; };
 		A10000000000000000000033 /* ImageProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000023 /* ImageProcessor.swift */; };
+		A1000000000000000000003C /* CameraLook.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002D /* CameraLook.swift */; };
+		A1000000000000000000003D /* FilteredPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002E /* FilteredPreviewView.swift */; };
 		A10000000000000000000034 /* PhotoPreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000024 /* PhotoPreviewViewController.swift */; };
 		A10000000000000000000035 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* Models.swift */; };
 		A10000000000000000000036 /* ShutterButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000026 /* ShutterButton.swift */; };
@@ -27,6 +29,8 @@
 		A10000000000000000000021 /* CameraViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraViewController.swift; sourceTree = "<group>"; };
 		A10000000000000000000022 /* CameraEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraEngine.swift; sourceTree = "<group>"; };
 		A10000000000000000000023 /* ImageProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageProcessor.swift; sourceTree = "<group>"; };
+		A1000000000000000000002D /* CameraLook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraLook.swift; sourceTree = "<group>"; };
+		A1000000000000000000002E /* FilteredPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilteredPreviewView.swift; sourceTree = "<group>"; };
 		A10000000000000000000024 /* PhotoPreviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoPreviewViewController.swift; sourceTree = "<group>"; };
 		A10000000000000000000025 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		A10000000000000000000026 /* ShutterButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShutterButton.swift; sourceTree = "<group>"; };
@@ -72,6 +76,8 @@
 				A10000000000000000000025 /* Models.swift */,
 				A10000000000000000000022 /* CameraEngine.swift */,
 				A10000000000000000000023 /* ImageProcessor.swift */,
+				A1000000000000000000002D /* CameraLook.swift */,
+				A1000000000000000000002E /* FilteredPreviewView.swift */,
 				A10000000000000000000021 /* CameraViewController.swift */,
 				A10000000000000000000024 /* PhotoPreviewViewController.swift */,
 				A10000000000000000000010 /* Views */,
@@ -167,6 +173,8 @@
 				A10000000000000000000035 /* Models.swift in Sources */,
 				A10000000000000000000032 /* CameraEngine.swift in Sources */,
 				A10000000000000000000033 /* ImageProcessor.swift in Sources */,
+				A1000000000000000000003C /* CameraLook.swift in Sources */,
+				A1000000000000000000003D /* FilteredPreviewView.swift in Sources */,
 				A10000000000000000000031 /* CameraViewController.swift in Sources */,
 				A10000000000000000000034 /* PhotoPreviewViewController.swift in Sources */,
 				A10000000000000000000036 /* ShutterButton.swift in Sources */,
@@ -310,7 +318,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.homikori.iPhone6Camera;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -335,7 +343,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.homikori.iPhone6Camera;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

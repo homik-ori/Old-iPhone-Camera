@@ -28,7 +28,7 @@ final class FocusReticleView: UIView {
         alpha = 0
 
         squareView.layer.borderColor = Theme.yellow.cgColor
-        squareView.layer.borderWidth = 1.8
+        squareView.layer.borderWidth = 1.5
         squareView.layer.cornerRadius = 3
         squareView.backgroundColor = .clear
 
@@ -90,7 +90,7 @@ final class FocusReticleView: UIView {
         isLocked = locked
         lockImageView.isHidden = !locked
         squareView.layer.borderColor = Theme.yellow.cgColor
-        squareView.layer.borderWidth = locked ? 2.3 : 1.8
+        squareView.layer.borderWidth = locked ? 2.0 : 1.5
     }
 
     func animateIn() {
