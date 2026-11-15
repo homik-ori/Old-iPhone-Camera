@@ -110,12 +110,56 @@ enum TimerSetting: Int, CaseIterable {
     var seconds: Int { rawValue }
 }
 
+/// Ручная выдержка. Индекс используется напрямую ползунком в панели настроек.
+enum ShutterSpeed: Int, CaseIterable {
+    case auto = 0
+    case s125
+    case s60
+    case s30
+    case s15
+    case s8
+    case s4
+    case s2
+    case s1
+
+    var title: String {
+        switch self {
+        case .auto: return "АВТО"
+        case .s125: return "1/125"
+        case .s60: return "1/60"
+        case .s30: return "1/30"
+        case .s15: return "1/15"
+        case .s8: return "1/8"
+        case .s4: return "1/4"
+        case .s2: return "1/2"
+        case .s1: return "1 с"
+        }
+    }
+
+    var duration: CMTime? {
+        switch self {
+        case .auto: return nil
+        case .s125: return CMTime(value: 1, timescale: 125)
+        case .s60: return CMTime(value: 1, timescale: 60)
+        case .s30: return CMTime(value: 1, timescale: 30)
+        case .s15: return CMTime(value: 1, timescale: 15)
+        case .s8: return CMTime(value: 1, timescale: 8)
+        case .s4: return CMTime(value: 1, timescale: 4)
+        case .s2: return CMTime(value: 1, timescale: 2)
+        case .s1: return CMTime(value: 1, timescale: 1)
+        }
+    }
+
+    var isManual: Bool { self != .auto }
+}
+
 enum AppError: LocalizedError {
     case cameraUnavailable
     case cannotAddInput
     case cannotAddOutput
     case captureFailed
     case imageProcessingFailed
+    case manualExposureUnsupported
     case photoLibraryDenied
     case photoLibrarySaveFailed(String)
 
@@ -131,6 +175,8 @@ enum AppError: LocalizedError {
             return "Не удалось получить снимок с камеры."
         case .imageProcessingFailed:
             return "Не удалось обработать изображение."
+        case .manualExposureUnsupported:
+            return "Эта камера не поддерживает ручную выдержку."
         case .photoLibraryDenied:
             return "Нет доступа к медиатеке. Разрешите добавление фото в настройках."
         case .photoLibrarySaveFailed(let message):

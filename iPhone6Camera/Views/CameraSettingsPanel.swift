@@ -7,6 +7,7 @@ final class CameraSettingsPanel: UIView {
     var onAspectChange: ((CaptureAspect) -> Void)?
     var onExposureChange: ((Float) -> Void)?
     var onTimerChange: ((TimerSetting) -> Void)?
+    var onShutterChange: ((ShutterSpeed) -> Void)?
     var onGridChange: ((Bool) -> Void)?
 
     private let blurView = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
@@ -19,11 +20,14 @@ final class CameraSettingsPanel: UIView {
     private let timerControl = UISegmentedControl(items: ["Выкл", "3 с", "10 с"])
     private let exposureSlider = UISlider()
     private let exposureValueLabel = UILabel()
+    private let shutterSlider = UISlider()
+    private let shutterValueLabel = UILabel()
     private let gridSwitch = UISwitch()
 
     private var toolButtons: [SettingsToolButton] = []
     private var detailViews: [UIView] = []
     private var selectedTool = 0
+    private var currentShutter: ShutterSpeed = .auto
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -86,6 +90,7 @@ final class CameraSettingsPanel: UIView {
             ("aspectratio", "Формат"),
             ("plusminus.circle", "Экспоз."),
             ("timer", "Таймер"),
+            ("stopwatch", "ВЫДЕРЖКА"),
             ("grid", "Сетка")
         ]
 
@@ -135,6 +140,38 @@ final class CameraSettingsPanel: UIView {
         exposureStack.spacing = 0
         exposureStack.alignment = .fill
 
+        shutterSlider.minimumValue = 0
+        shutterSlider.maximumValue = Float(ShutterSpeed.allCases.count - 1)
+        shutterSlider.value = 0
+        shutterSlider.minimumTrackTintColor = Theme.yellow
+        shutterSlider.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.25)
+        shutterSlider.thumbTintColor = .white
+        shutterSlider.addTarget(self, action: #selector(shutterChanged), for: .valueChanged)
+
+        shutterValueLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 12, weight: .bold)
+        shutterValueLabel.textColor = Theme.yellow
+        shutterValueLabel.textAlignment = .right
+        shutterValueLabel.text = ShutterSpeed.auto.title
+
+        let shutterTitle = UILabel()
+        shutterTitle.text = "ВЫДЕРЖКА"
+        shutterTitle.font = UIFont.systemFont(ofSize: 10, weight: .semibold)
+        shutterTitle.textColor = UIColor.white.withAlphaComponent(0.65)
+        shutterTitle.setContentHuggingPriority(.required, for: .horizontal)
+
+        shutterValueLabel.setContentHuggingPriority(.required, for: .horizontal)
+        shutterValueLabel.widthAnchor.constraint(equalToConstant: 64).isActive = true
+
+        let shutterHeader = UIStackView(arrangedSubviews: [shutterTitle, UIView(), shutterValueLabel])
+        shutterHeader.axis = .horizontal
+        shutterHeader.spacing = 8
+        shutterHeader.alignment = .center
+
+        let shutterStack = UIStackView(arrangedSubviews: [shutterHeader, shutterSlider])
+        shutterStack.axis = .vertical
+        shutterStack.spacing = 0
+        shutterStack.alignment = .fill
+
         gridSwitch.onTintColor = Theme.yellow
         gridSwitch.addTarget(self, action: #selector(gridChanged), for: .valueChanged)
 
@@ -149,7 +186,7 @@ final class CameraSettingsPanel: UIView {
         gridStack.spacing = 10
         gridStack.alignment = .center
 
-        detailViews = [flashControl, aspectControl, exposureStack, timerControl, gridStack]
+        detailViews = [flashControl, aspectControl, exposureStack, timerControl, shutterStack, gridStack]
         for view in detailViews {
             view.translatesAutoresizingMaskIntoConstraints = false
             detailContainer.addSubview(view)
@@ -200,6 +237,12 @@ final class CameraSettingsPanel: UIView {
         exposureValueLabel.text = Self.formatExposure(exposureSlider.value)
     }
 
+    func setShutter(_ speed: ShutterSpeed) {
+        currentShutter = speed
+        shutterSlider.value = Float(speed.rawValue)
+        shutterValueLabel.text = speed.title
+    }
+
     func selectTool(_ index: Int) {
         guard index >= 0, index < detailViews.count else { return }
         selectedTool = index
@@ -246,6 +289,17 @@ final class CameraSettingsPanel: UIView {
         exposureSlider.value = clamped
         exposureValueLabel.text = Self.formatExposure(clamped)
         onExposureChange?(clamped)
+    }
+
+    @objc private func shutterChanged() {
+        let index = Int(shutterSlider.value.rounded())
+        guard let speed = ShutterSpeed(rawValue: index) else { return }
+        shutterSlider.value = Float(index)
+        guard speed != currentShutter else { return }
+        currentShutter = speed
+        shutterValueLabel.text = speed.title
+        UISelectionFeedbackGenerator().selectionChanged()
+        onShutterChange?(speed)
     }
 
     private static func formatExposure(_ value: Float) -> String {

@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Build iPhone6Camera.ipa
+    name: Build Old_iphone_Cam.ipa
     runs-on: macos-latest
     timeout-minutes: 35
 
@@ -62,16 +62,16 @@ jobs:
           test -f build/Payload/iPhone6Camera.app/iPhone6Camera
 
           cd build
-          /usr/bin/zip -r -y iPhone6Camera.ipa Payload
+          /usr/bin/zip -r -y Old_iphone_Cam.ipa Payload
           echo "--- IPA contents ---"
-          unzip -l iPhone6Camera.ipa | head -30
-          ls -lh iPhone6Camera.ipa
+          unzip -l Old_iphone_Cam.ipa | head -30
+          ls -lh Old_iphone_Cam.ipa
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: iPhone6Camera-unsigned-ipa
-          path: build/iPhone6Camera.ipa
+          name: Old_iphone_Cam-ipa
+          path: build/Old_iphone_Cam.ipa
           if-no-files-found: error
           retention-days: 30
 

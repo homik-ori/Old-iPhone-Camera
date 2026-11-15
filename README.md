@@ -1,17 +1,11 @@
-# iPhone 6 Camera
+# Old iphone Cam
 
-[![Build](https://github.com/homik-ori/iPhone6Camera/actions/workflows/build.yml/badge.svg)](https://github.com/homik-ori/iPhone6Camera/actions/workflows/build.yml)
-[![Latest release](https://img.shields.io/github/v/release/homik-ori/iPhone6Camera)](https://github.com/homik-ori/iPhone6Camera/releases/latest)
+[![Build](https://github.com/homik-ori/Old-iPhone-Camera/actions/workflows/build.yml/badge.svg)](https://github.com/homik-ori/Old-iPhone-Camera/actions/workflows/build.yml)
+[![Latest release](https://img.shields.io/github/v/release/homik-ori/Old-iPhone-Camera)](https://github.com/homik-ori/Old-iPhone-Camera/releases/latest)
 
-Нативное iOS-приложение для съёмки с видом камеры iPhone 6 (2014): мягкая картинка без современной цифровой резкости, Smart HDR и Deep Fusion. Интерфейс повторяет приложение «Камера» из iOS 15.
+Нативное iOS-приложение для съёмки с видом камеры старого iPhone. Мягкая картинка без современной цифровой резкости, тёплый оттенок, естественное зерно и ручная выдержка для живого смазывания движения.
 
-Проект на Swift и UIKit, без CocoaPods и SPM. Используются только AVFoundation, Core Image и Photos.
-
-<p align="center">
-  <img src="Screenshots/settings.png" width="310" alt="Панель настроек камеры">
-  <img src="Screenshots/camera.png" width="310" alt="Главный экран камеры">
-</p>
-<p align="center"><sub>Скриншоты из iOS Simulator. В симуляторе нет камеры, поэтому видоискатель чёрный.</sub></p>
+Приложение написано на Swift и UIKit. Используются только AVFoundation, Core Image и Photos — без CocoaPods и SPM.
 
 ## Возможности
 
@@ -21,24 +15,32 @@
 - Мягкая цветокоррекция Core Image: небольшое размытие, вытягивание теней, тёплый баланс белого и слабое зерно.
 - Автосохранение JPEG с качеством 0.85 в «Фото».
 - Вспышка: авто / вкл / выкл.
-- Форматы кадра 4:3, 16:9 и 1:1 с плавной сменой рамки.
+- Форматы кадра 4:3, 16:9 и 1:1.
 - Коррекция экспозиции от −2.0 до +2.0 с шагом 0.3.
 - Таймер 3 и 10 секунд с обратным отсчётом.
 - Сетка правила третей.
 - Тап-фокус и свайп по экрану для изменения яркости.
 - Фиксация фокуса и экспозиции долгим нажатием.
 - Зум 1.0x–5.0x, пинч и полукруглое колесо точной настройки.
+- Ручная выдержка: 1/125, 1/60, 1/30, 1/15, 1/8, 1/4, 1/2 и 1 секунда.
+- Автоподбор ISO под выбранную выдержку и программная компенсация пересвета.
 - Просмотр последнего снимка, зум и «Поделиться».
 
-## Как получается «вайб iPhone 6»
+## Ручная выдержка
 
-1. Кадр снимается широкоугольной камерой с приоритетом скорости, чтобы система не успела применить тяжёлую нейровычислительную обработку.
+В панели настроек откройте «ВЫДЕРЖКА». Крайнее левое положение — `АВТО`; камера работает в `continuousAutoExposure`. При выборе фиксированного значения приложение переводит устройство в `setExposureModeCustom(duration:iso:)` и подбирает ISO так, чтобы сохранить текущую яркость сцены.
+
+Если даже минимальное ISO не компенсирует длинную выдержку, при обработке кадра применяется отрицательная `CIExposureAdjust`-компенсация и более мягкое восстановление светов. Тап по видоискателю меняет только точку фокуса и не сбрасывает выбранную выдержку.
+
+## Как получается «вайб» старого iPhone
+
+1. Кадр снимается широкоугольной камерой с приоритетом скорости, чтобы система не успела применить тяжёлую вычислительную обработку.
 2. Изображение уменьшается до 8 мегапикселей — это убирает микрорезкость современных сенсоров.
 3. Core Image слегка смягчает картинку, приглушает света, поднимает тени и добавляет тёплый оттенок.
 4. Поверх накладывается монохромное зерно с прозрачностью около 5%.
 5. Результат сохраняется в медиатеку отдельным JPEG.
 
-Параметры подобраны вручную и остаются в коде: `PhotoProcessor.swift`.
+Параметры подобраны вручную и остаются в коде: `ImageProcessor.swift`.
 
 ## Сборка
 
@@ -63,14 +65,14 @@ xcodebuild archive \
 ```bash
 mkdir -p build/Payload
 cp -R build/iPhone6Camera.xcarchive/Products/Applications/iPhone6Camera.app build/Payload/
-cd build && zip -r -y iPhone6Camera.ipa Payload
+cd build && zip -r -y Old_iphone_Cam.ipa Payload
 ```
 
-Готовый файл также собирается в GitHub Actions на `macos-latest` и лежит в артефактах каждой сборки.
+Готовый файл собирается в GitHub Actions на `macos-latest` и лежит в артефактах каждой сборки.
 
 ## Установка
 
-1. Скачайте `iPhone6Camera.ipa` из [последнего релиза](https://github.com/homik-ori/iPhone6Camera/releases/latest).
+1. Скачайте `Old_iphone_Cam.ipa` из [последнего релиза](https://github.com/homik-ori/Old-iPhone-Camera/releases/latest).
 2. Откройте AltStore → **My Apps → +**.
 3. Выберите IPA и подпишите его своим Apple ID.
 
@@ -82,13 +84,12 @@ cd build && zip -r -y iPhone6Camera.ipa Payload
 iPhone6Camera/
 ├── iPhone6Camera.xcodeproj
 ├── iPhone6Camera/
-│   ├── CameraEngine.swift          # AVCaptureSession, фокус, экспозиция, зум
-│   ├── PhotoProcessor.swift        # ресайз, фильтры, сохранение в Photos
+│   ├── CameraEngine.swift          # AVCaptureSession, фокус, экспозиция, выдержка, зум
+│   ├── ImageProcessor.swift        # ресайз, фильтры, компенсация, сохранение в Photos
 │   ├── CameraViewController.swift  # экран камеры и управление
 │   ├── PhotoPreviewViewController.swift
 │   ├── Models.swift
 │   └── Views/                      # затвор, сетка, фокус, зум-диал, панель
-├── Screenshots/
 └── .github/workflows/build.yml
 ```
 

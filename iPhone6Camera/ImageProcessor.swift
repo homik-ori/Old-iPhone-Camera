@@ -10,25 +10,28 @@ struct ProcessedPhoto {
     let pixelSize: CGSize
 }
 
-/// Постобработка «как на iPhone 6»: даунскейл до 8 Мп, лёгкое смягчение,
+/// Постобработка «как на старом iPhone»: даунскейл, лёгкое смягчение,
 /// тёплый баланс белого и очень деликатное зерно старого сенсора.
-final class PhotoProcessor {
-    static let shared = PhotoProcessor()
+final class ImageProcessor {
+    static let shared = ImageProcessor()
 
     private let context = CIContext(options: [CIContextOption.cacheIntermediates: false])
-    private let processingQueue = DispatchQueue(label: "com.homikori.iPhone6Camera.processing",
+    private let processingQueue = DispatchQueue(label: "com.homikori.OldiphoneCam.processing",
                                                 qos: .userInitiated)
 
     private init() {}
 
     func process(jpegData: Data,
                  aspect: CaptureAspect,
+                 exposureStops: Float = 0,
                  completion: @escaping (Result<ProcessedPhoto, Error>) -> Void) {
         processingQueue.async { [weak self] in
             guard let self else { return }
             let result: Result<ProcessedPhoto, Error>
             do {
-                result = .success(try self.processSynchronously(jpegData: jpegData, aspect: aspect))
+                result = .success(try self.processSynchronously(jpegData: jpegData,
+                                                                aspect: aspect,
+                                                                exposureStops: exposureStops))
             } catch {
                 result = .failure(error)
             }
@@ -36,7 +39,9 @@ final class PhotoProcessor {
         }
     }
 
-    private func processSynchronously(jpegData: Data, aspect: CaptureAspect) throws -> ProcessedPhoto {
+    private func processSynchronously(jpegData: Data,
+                                      aspect: CaptureAspect,
+                                      exposureStops: Float) throws -> ProcessedPhoto {
         guard let sourceImage = UIImage(data: jpegData), let sourceCGImage = sourceImage.cgImage else {
             throw AppError.imageProcessingFailed
         }
@@ -76,6 +81,13 @@ final class PhotoProcessor {
         let scaleY = target.height / cropRect.height
         image = image.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
 
+        // Компенсация пересвета при длинной выдержке, когда ISO уже на минимуме.
+        if abs(exposureStops) > 0.01 {
+            image = image.applyingFilter("CIExposureAdjust", parameters: [
+                "inputEV": exposureStops
+            ])
+        }
+
         // 1. Едва заметное оптическое смягчение.
         if let blur = CIFilter(name: "CIGaussianBlur",
                                parameters: [
@@ -88,7 +100,7 @@ final class PhotoProcessor {
         // 2. Мягкие света и тени — без современного «выжигания» HDR.
         image = image.applyingFilter("CIHighlightShadowAdjust", parameters: [
             "inputShadowAmount": 0.30,
-            "inputHighlightAmount": 0.88,
+            "inputHighlightAmount": exposureStops < -1.0 ? 0.76 : 0.88,
             "inputRadius": 2.5
         ])
 
@@ -175,7 +187,7 @@ enum PhotoLibrarySaver {
             PHPhotoLibrary.shared().performChanges({
                 let request = PHAssetCreationRequest.forAsset()
                 let options = PHAssetResourceCreationOptions()
-                options.originalFilename = "iPhone6Camera_\(Self.fileTimestamp()).jpg"
+                options.originalFilename = "OldiphoneCam_\(Self.fileTimestamp()).jpg"
                 options.uniformTypeIdentifier = "public.jpeg"
                 request.addResource(with: .photo, data: jpegData, options: options)
                 localIdentifier = request.placeholderForCreatedAsset?.localIdentifier

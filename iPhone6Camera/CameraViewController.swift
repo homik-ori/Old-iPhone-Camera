@@ -39,6 +39,7 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
     private var currentAspect: CaptureAspect = .fourThree
     private var flashSetting: FlashSetting = .auto
     private var timerSetting: TimerSetting = .off
+    private var shutterSpeed: ShutterSpeed = .auto
     private var isGridOn = false
     private var isFrontCamera = false
     private var isSettingsOpen = false
@@ -79,6 +80,7 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         static let aspect = "camera.aspect"
         static let timer = "camera.timer"
         static let grid = "camera.grid"
+        static let shutter = "camera.shutter"
     }
 
     // MARK: - Жизненный цикл
@@ -377,6 +379,9 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         }
         settingsPanel.onTimerChange = { [weak self] timer in
             self?.setTimer(timer)
+        }
+        settingsPanel.onShutterChange = { [weak self] speed in
+            self?.setShutter(speed)
         }
         settingsPanel.onGridChange = { [weak self] isOn in
             self?.setGrid(isOn)
@@ -712,6 +717,14 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
                 self.permissionView.isHidden = true
                 self.updatePreviewMirroring()
                 self.engine.start()
+                if self.shutterSpeed.isManual {
+                    self.engine.setShutter(self.shutterSpeed) { result in
+                        if case .failure = result {
+                            self.shutterSpeed = .auto
+                            self.settingsPanel.setShutter(.auto)
+                        }
+                    }
+                }
             case .failure(let error):
                 self.showErrorAlert(error)
             }
@@ -790,8 +803,11 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
                 self.isFrontCamera = position == .front
                 self.currentExposureBias = 0
                 self.currentZoom = 1
+                self.shutterSpeed = .auto
                 self.focusReticle.setBias(0)
                 self.settingsPanel.setExposure(0)
+                self.settingsPanel.setShutter(.auto)
+                UserDefaults.standard.set(ShutterSpeed.auto.rawValue, forKey: DefaultsKey.shutter)
                 self.updateZoomControls()
                 self.zoomDial.setZoom(1)
                 self.updatePreviewMirroring()
@@ -876,6 +892,23 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         timerSetting = timer
         UserDefaults.standard.set(timer.rawValue, forKey: DefaultsKey.timer)
         settingsPanel.setTimer(timer)
+    }
+
+    private func setShutter(_ speed: ShutterSpeed) {
+        let previous = shutterSpeed
+        shutterSpeed = speed
+        UserDefaults.standard.set(speed.rawValue, forKey: DefaultsKey.shutter)
+        settingsPanel.setShutter(speed)
+
+        engine.setShutter(speed) { [weak self] result in
+            guard let self else { return }
+            if case .failure(let error) = result {
+                self.shutterSpeed = previous
+                self.settingsPanel.setShutter(previous)
+                UserDefaults.standard.set(previous.rawValue, forKey: DefaultsKey.shutter)
+                self.showErrorAlert(error)
+            }
+        }
     }
 
     private func setGrid(_ isOn: Bool) {
@@ -1134,11 +1167,12 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         blinkScreen()
 
         let aspectAtCapture = currentAspect
+        let exposureStops = engine.captureExposureStops
         engine.capturePhoto(flash: flashSetting) { [weak self] result in
             guard let self else { return }
             switch result {
             case .success(let data):
-                self.processCapturedData(data, aspect: aspectAtCapture)
+                self.processCapturedData(data, aspect: aspectAtCapture, exposureStops: exposureStops)
             case .failure(let error):
                 self.isCapturing = false
                 self.showErrorAlert(error)
@@ -1146,9 +1180,11 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         }
     }
 
-    private func processCapturedData(_ data: Data, aspect: CaptureAspect) {
+    private func processCapturedData(_ data: Data, aspect: CaptureAspect, exposureStops: Float) {
         thumbnailSpinner.startAnimating()
-        PhotoProcessor.shared.process(jpegData: data, aspect: aspect) { [weak self] result in
+        ImageProcessor.shared.process(jpegData: data,
+                                      aspect: aspect,
+                                      exposureStops: exposureStops) { [weak self] result in
             guard let self else { return }
             switch result {
             case .success(let photo):
@@ -1328,6 +1364,9 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         if let value = TimerSetting(rawValue: defaults.integer(forKey: DefaultsKey.timer)) {
             timerSetting = value
         }
+        if let value = ShutterSpeed(rawValue: defaults.integer(forKey: DefaultsKey.shutter)) {
+            shutterSpeed = value
+        }
         isGridOn = defaults.bool(forKey: DefaultsKey.grid)
     }
 
@@ -1335,6 +1374,7 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         settingsPanel.setFlash(flashSetting)
         settingsPanel.setAspect(currentAspect)
         settingsPanel.setTimer(timerSetting)
+        settingsPanel.setShutter(shutterSpeed)
         settingsPanel.setGrid(isGridOn)
         settingsPanel.setExposure(currentExposureBias)
         gridOverlay.isOn = isGridOn

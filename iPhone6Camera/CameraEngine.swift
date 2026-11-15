@@ -17,6 +17,12 @@ final class CameraEngine: NSObject {
     private(set) var maxZoomFactor: CGFloat = 5
     private(set) var currentZoom: CGFloat = 1
     private(set) var cameraHasFlash = false
+    private(set) var shutterSpeed: ShutterSpeed = .auto
+    private(set) var captureExposureStops: Float = 0
+
+    private var autoBaselineISO: Float = 0
+    private var autoBaselineDuration: CMTime = .zero
+    private var manualExposureStops: Float = 0
 
     private var observers: [NSObjectProtocol] = []
 
@@ -124,6 +130,11 @@ final class CameraEngine: NSObject {
 
         currentZoom = 1
         exposureBias = 0
+        shutterSpeed = .auto
+        captureExposureStops = 0
+        autoBaselineISO = 0
+        autoBaselineDuration = .zero
+        manualExposureStops = 0
         maxZoomFactor = min(5.0, max(1.0, device.activeFormat.videoMaxZoomFactor))
     }
 
@@ -218,11 +229,12 @@ final class CameraEngine: NSObject {
                     device.exposurePointOfInterest = point
                 }
 
+                let keepsManualExposure = self.shutterSpeed.isManual
                 if lock {
                     if device.isFocusModeSupported(.locked) {
                         device.focusMode = .locked
                     }
-                    if device.isExposureModeSupported(.locked) {
+                    if !keepsManualExposure, device.isExposureModeSupported(.locked) {
                         device.exposureMode = .locked
                     }
                     device.isSubjectAreaChangeMonitoringEnabled = false
@@ -232,10 +244,12 @@ final class CameraEngine: NSObject {
                     } else if device.isFocusModeSupported(.continuousAutoFocus) {
                         device.focusMode = .continuousAutoFocus
                     }
-                    if device.isExposureModeSupported(.autoExpose) {
-                        device.exposureMode = .autoExpose
-                    } else if device.isExposureModeSupported(.continuousAutoExposure) {
-                        device.exposureMode = .continuousAutoExposure
+                    if !keepsManualExposure {
+                        if device.isExposureModeSupported(.autoExpose) {
+                            device.exposureMode = .autoExpose
+                        } else if device.isExposureModeSupported(.continuousAutoExposure) {
+                            device.exposureMode = .continuousAutoExposure
+                        }
                     }
                     device.isSubjectAreaChangeMonitoringEnabled = true
                 }
@@ -260,11 +274,13 @@ final class CameraEngine: NSObject {
                 if device.isFocusModeSupported(.continuousAutoFocus) {
                     device.focusMode = .continuousAutoFocus
                 }
-                if device.isExposureModeSupported(.continuousAutoExposure) {
-                    device.exposureMode = .continuousAutoExposure
+                if !self.shutterSpeed.isManual {
+                    if device.isExposureModeSupported(.continuousAutoExposure) {
+                        device.exposureMode = .continuousAutoExposure
+                    }
+                    device.setExposureTargetBias(self.exposureBias, completionHandler: nil)
                 }
                 device.isSubjectAreaChangeMonitoringEnabled = true
-                device.setExposureTargetBias(self.exposureBias, completionHandler: nil)
                 device.unlockForConfiguration()
             } catch {
                 // Сброс не критичен: не блокируем интерфейс из-за ошибки конфигурации.
@@ -287,10 +303,91 @@ final class CameraEngine: NSObject {
                 device.setExposureTargetBias(clamped, completionHandler: nil)
                 device.unlockForConfiguration()
                 self.exposureBias = clamped
+                if self.shutterSpeed.isManual {
+                    self.captureExposureStops = min(2.5, max(-4.0, self.manualExposureStops + clamped))
+                }
             } catch {
                 // Значение остаётся прежним.
             }
             DispatchQueue.main.async { completion?() }
+        }
+    }
+
+    /// Переключает камеру между автоэкспозицией и ручной выдержкой.
+    /// ISO подбирается так, чтобы сохранить яркость сцены, насколько это возможно.
+    func setShutter(_ speed: ShutterSpeed,
+                    completion: @escaping (Result<Void, Error>) -> Void) {
+        sessionQueue.async { [weak self] in
+            guard let self, let device = self.videoDevice else {
+                DispatchQueue.main.async { completion(.failure(AppError.cameraUnavailable)) }
+                return
+            }
+
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+
+                if speed == .auto {
+                    guard device.isExposureModeSupported(.continuousAutoExposure) else {
+                        throw AppError.manualExposureUnsupported
+                    }
+                    device.exposureMode = .continuousAutoExposure
+                    device.setExposureTargetBias(self.exposureBias, completionHandler: nil)
+                    self.shutterSpeed = .auto
+                    self.autoBaselineISO = 0
+                    self.autoBaselineDuration = .zero
+                    self.manualExposureStops = 0
+                    self.captureExposureStops = 0
+                } else {
+                    guard device.isExposureModeSupported(.custom), let requestedDuration = speed.duration else {
+                        throw AppError.manualExposureUnsupported
+                    }
+
+                    let wasManual = self.shutterSpeed.isManual
+                    if !wasManual || self.autoBaselineISO <= 0 || CMTimeGetSeconds(self.autoBaselineDuration) <= 0 {
+                        self.autoBaselineISO = max(device.iso, 1)
+                        self.autoBaselineDuration = device.exposureDuration
+                    }
+
+                    let minDuration = device.activeFormat.minExposureDuration
+                    let maxDuration = device.activeFormat.maxExposureDuration
+                    var duration = requestedDuration
+                    if CMTimeCompare(duration, minDuration) < 0 { duration = minDuration }
+                    if CMTimeCompare(duration, maxDuration) > 0 { duration = maxDuration }
+
+                    let baselineSeconds = CMTimeGetSeconds(self.autoBaselineDuration)
+                    let targetSeconds = CMTimeGetSeconds(duration)
+                    guard baselineSeconds.isFinite, baselineSeconds > 0,
+                          targetSeconds.isFinite, targetSeconds > 0 else {
+                        throw AppError.manualExposureUnsupported
+                    }
+
+                    let minISO = max(device.activeFormat.minISO, 1)
+                    let maxISO = max(device.activeFormat.maxISO, minISO)
+                    let idealISO = self.autoBaselineISO * Float(baselineSeconds / targetSeconds)
+                    let targetISO = min(max(idealISO, minISO), maxISO)
+
+                    device.setExposureModeCustom(duration: duration, iso: targetISO, completionHandler: nil)
+                    self.shutterSpeed = speed
+
+                    // Если минимального ISO всё равно не хватает, экспозиция будет
+                    // светлее исходной. Компенсируем это при постобработке.
+                    let baselineExposure = self.autoBaselineISO * Float(baselineSeconds)
+                    let appliedExposure = targetISO * Float(targetSeconds)
+                    let stops: Float
+                    if baselineExposure > 0, appliedExposure > 0 {
+                        stops = Float(log2(Double(baselineExposure / appliedExposure)))
+                    } else {
+                        stops = 0
+                    }
+                    self.manualExposureStops = min(2.0, max(-4.0, stops))
+                    self.captureExposureStops = min(2.5, max(-4.0, self.manualExposureStops + self.exposureBias))
+                }
+
+                DispatchQueue.main.async { completion(.success(())) }
+            } catch {
+                DispatchQueue.main.async { completion(.failure(error)) }
+            }
         }
     }
 
