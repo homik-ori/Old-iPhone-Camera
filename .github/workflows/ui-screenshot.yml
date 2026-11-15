@@ -1,0 +1,62 @@
+name: UI screenshot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  screenshot:
+    name: Shutter panel screenshot
+    runs-on: macos-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build for simulator
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project iPhone6Camera.xcodeproj \
+            -scheme iPhone6Camera \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            build | tee "$RUNNER_TEMP/simulator-build.log"
+
+      - name: Launch and capture
+        run: |
+          set -euo pipefail
+          RUNTIME_ID="$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(r["identifier"] for r in d["runtimes"] if r.get("isAvailable") and r["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-")))')"
+          DEVICE_TYPE="$(xcrun simctl list devicetypes -j | python3 -c 'import json,sys; d=json.load(sys.stdin); names=[x["identifier"] for x in d["devicetypes"] if x["name"].startswith("iPhone 16 Pro")]; print(names[0] if names else next(x["identifier"] for x in d["devicetypes"] if x["name"].startswith("iPhone")))')"
+          UDID="$(xcrun simctl create 'OldiphoneCam-ShutterShot' "$DEVICE_TYPE" "$RUNTIME_ID")"
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/iPhone6Camera.app"
+          test -d "$APP_PATH"
+          xcrun simctl install "$UDID" "$APP_PATH"
+          xcrun simctl launch "$UDID" com.homikori.iPhone6Camera -openShutterPanel
+          sleep 3
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shutter.png"
+
+      - name: Upload screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shutter-panel-screenshot
+          path: ${{ runner.temp }}/shutter.png
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Shutdown simulator
+        if: always()
+        run: |
+          if [ -n "${UDID:-}" ]; then
+            xcrun simctl shutdown "$UDID" || true
+            xcrun simctl delete "$UDID" || true
+          fi

@@ -298,12 +298,15 @@ final class CameraEngine: NSObject {
             }
 
             let clamped = min(max(bias, -2.0), 2.0)
+            let manual = self.shutterSpeed.isManual
             do {
                 try device.lockForConfiguration()
-                device.setExposureTargetBias(clamped, completionHandler: nil)
+                if !manual {
+                    device.setExposureTargetBias(clamped, completionHandler: nil)
+                }
                 device.unlockForConfiguration()
                 self.exposureBias = clamped
-                if self.shutterSpeed.isManual {
+                if manual {
                     self.captureExposureStops = min(2.5, max(-4.0, self.manualExposureStops + clamped))
                 }
             } catch {

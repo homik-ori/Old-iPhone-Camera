@@ -103,6 +103,13 @@ final class CameraViewController: UIViewController, UIGestureRecognizerDelegate 
         impactFeedback.prepare()
         selectionFeedback.prepare()
         startCameraIfPossible()
+
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-openShutterPanel") {
+            settingsPanel.selectTool(4)
+            setSettingsOpen(true, animated: false)
+        }
+        #endif
     }
 
     override func viewWillAppear(_ animated: Bool) {
